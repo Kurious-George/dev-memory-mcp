@@ -1,0 +1,4 @@
+mcp
+sentence-transformers
+sqlite-vec
+pydantic
