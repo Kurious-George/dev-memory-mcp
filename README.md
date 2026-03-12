@@ -178,5 +178,3 @@ __pycache__/
 Claude can reason, write code, and analyze complex problems within a single conversation. What it fundamentally cannot do is persist state between conversations or access data that wasn't pasted into the context window.
 
 MCP provides the bridge. This project is specifically designed around what MCP uniquely enables — not as a thin API wrapper, but as a structural solution to Claude's statelessness. The test: could you get 80% of this value by pasting data into a Claude conversation? For a personal dev memory store that accumulates across months of sessions, no. The data is too large, too dynamic, and too private to paste in.
-
----
