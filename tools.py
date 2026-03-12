@@ -16,6 +16,7 @@ from pydantic import BaseModel, Field, ConfigDict, field_validator
 from mcp.server.fastmcp import FastMCP
 
 import db
+import embeddings
 
 # ── Input models ──────────────────────────────────────────────────────────────
 
@@ -230,6 +231,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
+        embeddings.store_embedding(record_id, embeddings.build_embed_text(params.summary, body))
         return (
             f"✅ Decision recorded (id: **{record_id}**)\n\n"
             f"**{params.summary}**\n"
@@ -276,6 +278,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
+        embeddings.store_embedding(record_id, embeddings.build_embed_text(params.summary, body))
         return (
             f"🚫 Dead end logged (id: **{record_id}**)\n\n"
             f"**{params.summary}**\n"
@@ -328,6 +331,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
+        embeddings.store_embedding(record_id, embeddings.build_embed_text(params.summary, body))
         return f"💾 Context snapshot saved (id: **{record_id}**)\n\n**{params.summary}**"
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -361,6 +365,7 @@ def register_tools(mcp: FastMCP) -> None:
             record_type="question",
             summary=params.question,
         )
+        embeddings.store_embedding(record_id, embeddings.build_embed_text(params.question, None))
         return f"❓ Question logged (id: **{record_id}**)\n\n{params.question}"
 
     # ──────────────────────────────────────────────────────────────────────────
@@ -378,8 +383,8 @@ def register_tools(mcp: FastMCP) -> None:
     async def recall(params: RecallInput) -> str:
         """Search memory for records relevant to a query.
 
-        Phase 1: keyword search across summary and body fields.
-        Phase 2 (after embeddings.py is wired up): semantic vector search.
+        Uses semantic vector search (sentence-transformers) to find records
+        by meaning, not just keyword match. Works even when exact words differ.
 
         Use this to answer questions like:
         - 'Have we dealt with auth before?'
@@ -396,7 +401,7 @@ def register_tools(mcp: FastMCP) -> None:
             str: Markdown-formatted list of matching records, or a
                  'no results' message.
         """
-        results = db.keyword_search(
+        results = embeddings.semantic_search(
             project=params.project,
             query=params.query,
             limit=params.limit,

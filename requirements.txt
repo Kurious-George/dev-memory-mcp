@@ -1,4 +1,4 @@
 mcp
 sentence-transformers
-sqlite-vec
+numpy
 pydantic
