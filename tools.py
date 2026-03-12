@@ -10,9 +10,8 @@ Import and registration pattern:
     register_tools(mcp)
 """
 
-import json
 from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict, field_validator
+from pydantic import BaseModel, Field, ConfigDict
 from mcp.server.fastmcp import FastMCP
 
 import db
@@ -79,7 +78,7 @@ class SaveContextInput(BaseModel):
     project: str = Field(..., description="Project slug.", min_length=1, max_length=80)
     summary: str = Field(
         ...,
-        description="Short title for this context snapshot (e.g. 'End of session 2025-03-11').",
+        description="Short title for this context snapshot (e.g. 'End of session 2026-03-12').",
         min_length=1,
         max_length=300,
     )
@@ -154,7 +153,6 @@ class ResolveQuestionInput(BaseModel):
 
 class ListProjectsInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    # No fields needed — intentionally empty.
 
 
 class DeleteRecordInput(BaseModel):
@@ -175,7 +173,6 @@ def _fmt_record(record: dict) -> str:
         f"**[{record['type'].upper()} #{record['id']}]** {record['summary']}",
         f"*Project:* `{record['project']}` | *Created:* {record['created_at']}",
     ]
-
     body = record.get("body")
     if isinstance(body, dict):
         for key, value in body.items():
@@ -184,10 +181,8 @@ def _fmt_record(record: dict) -> str:
                 if isinstance(value, list):
                     value = ", ".join(value)
                 lines.append(f"*{label}:* {value}")
-
     if record.get("resolved"):
         lines.append("*Status:* ✅ Resolved")
-
     return "\n".join(lines)
 
 
@@ -248,8 +243,6 @@ def register_tools(mcp: FastMCP) -> None:
             f"*Reasoning:* {params.reasoning}"
         )
 
-    # ──────────────────────────────────────────────────────────────────────────
-
     @mcp.tool(
         name="log_dead_end",
         annotations={
@@ -295,8 +288,6 @@ def register_tools(mcp: FastMCP) -> None:
             f"*Why it failed:* {params.why_it_failed}"
         )
 
-    # ──────────────────────────────────────────────────────────────────────────
-
     @mcp.tool(
         name="save_context",
         annotations={
@@ -326,14 +317,12 @@ def register_tools(mcp: FastMCP) -> None:
         Returns:
             str: Confirmation message with the assigned record id.
         """
-        body = {
+        body = {k: v for k, v in {
             "whats_working": params.whats_working,
             "in_progress": params.in_progress,
             "blocked_on": params.blocked_on,
             "notes": params.notes,
-        }
-        # Strip None values to keep the body clean
-        body = {k: v for k, v in body.items() if v is not None}
+        }.items() if v is not None}
 
         record_id = db.insert_record(
             project=params.project,
@@ -343,8 +332,6 @@ def register_tools(mcp: FastMCP) -> None:
         )
         embeddings.store_embedding(record_id, embeddings.build_embed_text(params.summary, body))
         return f"💾 Context snapshot saved (id: **{record_id}**)\n\n**{params.summary}**"
-
-    # ──────────────────────────────────────────────────────────────────────────
 
     @mcp.tool(
         name="add_question",
@@ -378,8 +365,6 @@ def register_tools(mcp: FastMCP) -> None:
         embeddings.store_embedding(record_id, embeddings.build_embed_text(params.question, None))
         return f"❓ Question logged (id: **{record_id}**)\n\n{params.question}"
 
-    # ──────────────────────────────────────────────────────────────────────────
-
     @mcp.tool(
         name="recall",
         annotations={
@@ -394,7 +379,8 @@ def register_tools(mcp: FastMCP) -> None:
         """Search memory for records relevant to a query.
 
         Uses semantic vector search (sentence-transformers) to find records
-        by meaning, not just keyword match. Works even when exact words differ.
+        by meaning, not just keyword match. Falls back to keyword search if
+        no embeddings exist yet for the project.
 
         Use this to answer questions like:
         - 'Have we dealt with auth before?'
@@ -418,7 +404,6 @@ def register_tools(mcp: FastMCP) -> None:
             limit=params.limit,
         )
 
-        # Fall back to keyword search if no embeddings exist yet for this project
         if not results:
             search_method = "keyword"
             results = db.keyword_search(
@@ -433,8 +418,6 @@ def register_tools(mcp: FastMCP) -> None:
         header = f"🔍 Found **{len(results)}** record(s) in `{params.project}` for `{params.query}` _(via {search_method} search)_:\n"
         body = "\n\n---\n".join(_fmt_record(r) for r in results)
         return header + "\n" + body
-
-    # ──────────────────────────────────────────────────────────────────────────
 
     @mcp.tool(
         name="get_session_brief",
@@ -475,8 +458,6 @@ def register_tools(mcp: FastMCP) -> None:
 
         return "\n\n".join(sections)
 
-    # ──────────────────────────────────────────────────────────────────────────
-
     @mcp.tool(
         name="resolve_question",
         annotations={
@@ -504,8 +485,6 @@ def register_tools(mcp: FastMCP) -> None:
         if success:
             return f"✅ Question **#{params.record_id}** marked as resolved."
         return f"⚠️ No unresolved question found with id **#{params.record_id}**. Check the id with recall or get_session_brief."
-
-    # ──────────────────────────────────────────────────────────────────────────
 
     @mcp.tool(
         name="list_projects",
@@ -535,8 +514,6 @@ def register_tools(mcp: FastMCP) -> None:
 
         project_list = "\n".join(f"- `{p}`" for p in projects)
         return f"📂 **{len(projects)} project(s) in memory:**\n\n{project_list}"
-
-    # ──────────────────────────────────────────────────────────────────────────
 
     @mcp.tool(
         name="delete_record",
