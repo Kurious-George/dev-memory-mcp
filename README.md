@@ -128,10 +128,10 @@ Claude should call `list_projects` and respond (with an empty list if you haven'
 You don't need to ask Claude to use specific tools. Just talk naturally — Claude will call the appropriate tool when relevant.
 
 **Start a session:**
-> "Give me a session brief for the helix project"
+> "Give me a session brief for the FastRecov project"
 
 **Log a decision mid-session:**
-> "Remember that we chose Firecracker over QEMU for helix because of the minimal attack surface and sub-second boot times"
+> "Remember that we chose Firecracker over QEMU for FastRecov because of the minimal attack surface and sub-second boot times"
 
 **Flag a dead end:**
 > "Log that we tried using sqlite-vec for vector storage but dropped it because the Windows DLL loading was fragile and we didn't need the extra dependency"
@@ -140,10 +140,10 @@ You don't need to ask Claude to use specific tools. Just talk naturally — Clau
 > "Add an open question: how should we handle eBPF program lifecycle when a VM exits unexpectedly?"
 
 **Search across memory:**
-> "What do we know about our virtualization decisions?"
+> "What do we know about our database decisions?"
 
 **End a session:**
-> "Save context for helix before I close out"
+> "Save context for FastRecov before I close out"
 
 ---
 
@@ -180,10 +180,3 @@ Claude can reason, write code, and analyze complex problems within a single conv
 MCP provides the bridge. This project is specifically designed around what MCP uniquely enables — not as a thin API wrapper, but as a structural solution to Claude's statelessness. The test: could you get 80% of this value by pasting data into a Claude conversation? For a personal dev memory store that accumulates across months of sessions, no. The data is too large, too dynamic, and too private to paste in.
 
 ---
-
-## Roadmap
-
-- [ ] `delete_record` tool for cleaning up bad entries
-- [ ] Graceful fallback from semantic to keyword search when no embeddings exist
-- [ ] Backfill script to embed records created before Phase 2
-- [ ] Cross-project recall for questions like "have we solved this problem in any project?"
