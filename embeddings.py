@@ -18,7 +18,6 @@ Public API:
 import struct
 import numpy as np
 from functools import lru_cache
-from sentence_transformers import SentenceTransformer
 
 import db
 
@@ -27,7 +26,8 @@ import db
 MODEL_NAME = "all-MiniLM-L6-v2"
 
 @lru_cache(maxsize=1)
-def _get_model() -> SentenceTransformer:
+def _get_model():
+    from sentence_transformers import SentenceTransformer
     """
     Load the embedding model once and cache it for the lifetime of the server.
 
