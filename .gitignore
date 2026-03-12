@@ -2,3 +2,4 @@ memory.db
 .venv/
 __pychache__/
 *.pyc
+dev-memory-mcp-project-overview.md
