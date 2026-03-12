@@ -104,6 +104,20 @@ def insert_record(
         return cursor.lastrowid
 
 
+def delete_record(record_id: int) -> bool:
+    """
+    Permanently delete a record and its embedding (via CASCADE).
+
+    Returns:
+        True if a row was deleted, False if the id didn't exist.
+    """
+    with get_connection() as conn:
+        cursor = conn.execute(
+            "DELETE FROM records WHERE id = ?", (record_id,)
+        )
+        return cursor.rowcount > 0
+
+
 def resolve_question(record_id: int) -> bool:
     """
     Mark a question record as resolved.

@@ -157,6 +157,16 @@ class ListProjectsInput(BaseModel):
     # No fields needed — intentionally empty.
 
 
+class DeleteRecordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_id: int = Field(
+        ...,
+        description="The integer id of the record to permanently delete.",
+        ge=1,
+    )
+
+
 # ── Formatting helpers ────────────────────────────────────────────────────────
 
 def _fmt_record(record: dict) -> str:
@@ -401,16 +411,26 @@ def register_tools(mcp: FastMCP) -> None:
             str: Markdown-formatted list of matching records, or a
                  'no results' message.
         """
+        search_method = "semantic"
         results = embeddings.semantic_search(
             project=params.project,
             query=params.query,
             limit=params.limit,
         )
 
+        # Fall back to keyword search if no embeddings exist yet for this project
+        if not results:
+            search_method = "keyword"
+            results = db.keyword_search(
+                project=params.project,
+                query=params.query,
+                limit=params.limit,
+            )
+
         if not results:
             return f"🔍 No records found in **{params.project}** matching `{params.query}`."
 
-        header = f"🔍 Found **{len(results)}** record(s) in `{params.project}` for `{params.query}`:\n"
+        header = f"🔍 Found **{len(results)}** record(s) in `{params.project}` for `{params.query}` _(via {search_method} search)_:\n"
         body = "\n\n---\n".join(_fmt_record(r) for r in results)
         return header + "\n" + body
 
@@ -515,3 +535,34 @@ def register_tools(mcp: FastMCP) -> None:
 
         project_list = "\n".join(f"- `{p}`" for p in projects)
         return f"📂 **{len(projects)} project(s) in memory:**\n\n{project_list}"
+
+    # ──────────────────────────────────────────────────────────────────────────
+
+    @mcp.tool(
+        name="delete_record",
+        annotations={
+            "title": "Delete a Record",
+            "readOnlyHint": False,
+            "destructiveHint": True,
+            "idempotentHint": False,
+            "openWorldHint": False,
+        },
+    )
+    async def delete_record(params: DeleteRecordInput) -> str:
+        """Permanently delete a record and its embedding from memory.
+
+        Use this to clean up duplicate, incorrect, or outdated records.
+        This action is irreversible. Find the record id via recall or
+        get_session_brief before calling this tool.
+
+        Args:
+            params (DeleteRecordInput): Validated input containing:
+                - record_id (int): The integer id of the record to delete.
+
+        Returns:
+            str: Confirmation message, or an error if the id wasn't found.
+        """
+        success = db.delete_record(params.record_id)
+        if success:
+            return f"🗑️ Record **#{params.record_id}** permanently deleted."
+        return f"⚠️ No record found with id **#{params.record_id}**. Check the id with recall or get_session_brief."
