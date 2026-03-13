@@ -6,18 +6,21 @@ locally — no API key, no cloud, no cost per query.
 
 Stores vectors as BLOBs in the embeddings table (raw float32 bytes)
 and performs cosine similarity search by loading all project embeddings
-into memory and ranking them with numpy. This is correct and fast at
-the scale of a personal dev memory store (hundreds to low thousands
-of records).
+into memory and ranking them with numpy.
 
 Public API:
-    store_embedding(record_id, text) -> None
-    semantic_search(project, query, limit) -> list[dict]
+    store_embedding(record_id, text) -> None        (sync, for backfill.py)
+    store_embedding_async(record_id, text) -> None  (async, for tools.py)
+    semantic_search(record_id, query, limit) -> list[dict]  (sync)
+    semantic_search_async(...) -> list[dict]        (async, for tools.py)
 """
 
+import asyncio
 import struct
-import numpy as np
+from concurrent.futures import ThreadPoolExecutor
 from functools import lru_cache
+
+import numpy as np
 
 import db
 
@@ -25,23 +28,32 @@ import db
 
 MODEL_NAME = "all-MiniLM-L6-v2"
 
+# Single shared executor — keeps torch off the asyncio event loop entirely.
+_executor = ThreadPoolExecutor(max_workers=1)
+
+
 @lru_cache(maxsize=1)
 def _get_model():
-    from sentence_transformers import SentenceTransformer
     """
     Load the embedding model once and cache it for the lifetime of the server.
-
-    First call will download ~80MB if the model isn't cached locally.
-    Subsequent calls return the already-loaded model instantly.
+    Import is lazy so sentence_transformers and torch only load on first tool
+    call, not at server startup. MCP handshake completes instantly.
     """
+    from sentence_transformers import SentenceTransformer
     return SentenceTransformer(MODEL_NAME)
 
 
 def _embed(text: str) -> np.ndarray:
-    """Generate a normalized float32 embedding vector for the given text."""
+    """Generate a normalized float32 embedding vector. Blocking — runs in executor when called from async context."""
     model = _get_model()
     vector = model.encode(text, normalize_embeddings=True)
     return vector.astype(np.float32)
+
+
+async def _embed_async(text: str) -> np.ndarray:
+    """Non-blocking wrapper around _embed for use inside async tool functions."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, _embed, text)
 
 # ── Serialization ─────────────────────────────────────────────────────────────
 
@@ -52,25 +64,26 @@ def _vector_to_blob(vector: np.ndarray) -> bytes:
 
 def _blob_to_vector(blob: bytes) -> np.ndarray:
     """Unpack raw bytes from SQLite back into a float32 numpy array."""
-    n = len(blob) // 4  # 4 bytes per float32
+    n = len(blob) // 4
     return np.array(struct.unpack(f"{n}f", blob), dtype=np.float32)
 
 # ── Storage ───────────────────────────────────────────────────────────────────
 
 def store_embedding(record_id: int, text: str) -> None:
-    """
-    Generate and store an embedding for a record.
-
-    Called immediately after db.insert_record() so every record
-    has a corresponding vector from the moment it's created.
-
-    Args:
-        record_id: The integer id of the record in the records table.
-        text:      The text to embed (typically summary + body fields joined).
-    """
+    """Synchronous version — used by backfill.py."""
     vector = _embed(text)
     blob = _vector_to_blob(vector)
+    with db.get_connection() as conn:
+        conn.execute(
+            "INSERT OR REPLACE INTO embeddings (record_id, embedding) VALUES (?, ?)",
+            (record_id, blob),
+        )
 
+
+async def store_embedding_async(record_id: int, text: str) -> None:
+    """Async version — used by tools.py. Runs embedding in thread pool."""
+    vector = await _embed_async(text)
+    blob = _vector_to_blob(vector)
     with db.get_connection() as conn:
         conn.execute(
             "INSERT OR REPLACE INTO embeddings (record_id, embedding) VALUES (?, ?)",
@@ -79,34 +92,11 @@ def store_embedding(record_id: int, text: str) -> None:
 
 # ── Search ────────────────────────────────────────────────────────────────────
 
-def semantic_search(project: str, query: str, limit: int = 8) -> list[dict]:
-    """
-    Find records semantically similar to a query within a project.
-
-    Strategy:
-        1. Embed the query with the same model used at insert time.
-        2. Load all (record_id, embedding) pairs for the project.
-        3. Compute cosine similarity between query and each record.
-           (Vectors are pre-normalized at insert time, so dot product = cosine sim.)
-        4. Return the top-k records ranked by similarity.
-
-    This in-memory approach is correct and plenty fast for personal-scale
-    stores. If a project ever exceeds ~10k records, swap step 2-4 for a
-    FAISS index.
-
-    Args:
-        project: Project slug to scope the search.
-        query:   Natural language query string.
-        limit:   Number of results to return.
-
-    Returns:
-        List of record dicts (same shape as db._row_to_dict) ordered
-        by descending cosine similarity. Empty list if no embeddings exist.
-    """
+def _run_search(project: str, query: str, limit: int) -> list[dict]:
+    """Core search logic — synchronous, runs in thread pool when called async."""
     project = project.strip().lower()
     query_vector = _embed(query)
 
-    # Load all embeddings for this project in one query
     with db.get_connection() as conn:
         rows = conn.execute(
             """
@@ -121,41 +111,37 @@ def semantic_search(project: str, query: str, limit: int = 8) -> list[dict]:
     if not rows:
         return []
 
-    # Unpack embeddings into a matrix: shape (n_records, embedding_dim)
     record_ids = [row["id"] for row in rows]
     matrix = np.stack([_blob_to_vector(row["embedding"]) for row in rows])
-
-    # Cosine similarity: dot product of normalized vectors
-    scores = matrix @ query_vector  # shape: (n_records,)
-
-    # Rank and take top-k
+    scores = matrix @ query_vector
     top_indices = np.argsort(scores)[::-1][:limit]
     top_ids = [record_ids[i] for i in top_indices]
 
-    # Fetch full record data for the top hits, preserving rank order
     results = []
     for record_id in top_ids:
         record = db.get_record(record_id)
         if record:
             results.append(record)
-
     return results
 
 
+def semantic_search(project: str, query: str, limit: int = 8) -> list[dict]:
+    """Synchronous semantic search — used by backfill.py and keyword fallback testing."""
+    return _run_search(project, query, limit)
+
+
+async def semantic_search_async(project: str, query: str, limit: int = 8) -> list[dict]:
+    """Async semantic search — used by tools.py. Runs in thread pool."""
+    loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(_executor, _run_search, project, query, limit)
+
+# ── Text construction ─────────────────────────────────────────────────────────
+
 def build_embed_text(summary: str, body: dict | None) -> str:
     """
-    Construct the text string to embed for a record.
-
-    Joins summary with all non-null body values so the vector
-    captures the full semantic content of the record, not just
-    the one-line summary.
-
-    Args:
-        summary: The record's summary field.
-        body:    The record's parsed body dict (or None).
-
-    Returns:
-        A single string suitable for embedding.
+    Construct the string to embed for a record.
+    Joins summary with all non-null body values so the vector captures
+    the full semantic content, not just the one-line summary.
     """
     parts = [summary]
     if body and isinstance(body, dict):

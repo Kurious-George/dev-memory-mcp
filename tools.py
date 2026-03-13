@@ -236,7 +236,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
-        embeddings.store_embedding(record_id, embeddings.build_embed_text(params.summary, body))
+        await embeddings.store_embedding_async(record_id, embeddings.build_embed_text(params.summary, body))
         return (
             f"✅ Decision recorded (id: **{record_id}**)\n\n"
             f"**{params.summary}**\n"
@@ -281,7 +281,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
-        embeddings.store_embedding(record_id, embeddings.build_embed_text(params.summary, body))
+        await embeddings.store_embedding_async(record_id, embeddings.build_embed_text(params.summary, body))
         return (
             f"🚫 Dead end logged (id: **{record_id}**)\n\n"
             f"**{params.summary}**\n"
@@ -330,7 +330,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
-        embeddings.store_embedding(record_id, embeddings.build_embed_text(params.summary, body))
+        await embeddings.store_embedding_async(record_id, embeddings.build_embed_text(params.summary, body))
         return f"💾 Context snapshot saved (id: **{record_id}**)\n\n**{params.summary}**"
 
     @mcp.tool(
@@ -362,7 +362,7 @@ def register_tools(mcp: FastMCP) -> None:
             record_type="question",
             summary=params.question,
         )
-        embeddings.store_embedding(record_id, embeddings.build_embed_text(params.question, None))
+        await embeddings.store_embedding_async(record_id, embeddings.build_embed_text(params.question, None))
         return f"❓ Question logged (id: **{record_id}**)\n\n{params.question}"
 
     @mcp.tool(
@@ -398,7 +398,7 @@ def register_tools(mcp: FastMCP) -> None:
                  'no results' message.
         """
         search_method = "semantic"
-        results = embeddings.semantic_search(
+        results = await embeddings.semantic_search_async(
             project=params.project,
             query=params.query,
             limit=params.limit,
