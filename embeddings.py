@@ -52,7 +52,7 @@ def _embed(text: str) -> np.ndarray:
 
 async def _embed_async(text: str) -> np.ndarray:
     """Non-blocking wrapper around _embed for use inside async tool functions."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_executor, _embed, text)
 
 # ── Serialization ─────────────────────────────────────────────────────────────
@@ -132,7 +132,7 @@ def semantic_search(project: str, query: str, limit: int = 8) -> list[dict]:
 
 async def semantic_search_async(project: str, query: str, limit: int = 8) -> list[dict]:
     """Async semantic search — used by tools.py. Runs in thread pool."""
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_executor, _run_search, project, query, limit)
 
 # ── Text construction ─────────────────────────────────────────────────────────

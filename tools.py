@@ -10,12 +10,28 @@ Import and registration pattern:
     register_tools(mcp)
 """
 
+import asyncio
+import logging
 from typing import Optional
 from pydantic import BaseModel, Field, ConfigDict
 from mcp.server.fastmcp import FastMCP
 
 import db
 import embeddings
+
+logger = logging.getLogger("dev_memory_mcp")
+
+
+async def _bg_embed(record_id: int, text: str) -> None:
+    """Fire-and-forget embedding storage. Errors are logged, not raised."""
+    try:
+        await embeddings.store_embedding_async(record_id, text)
+    except Exception as exc:
+        logger.warning(
+            "Embedding for record %d failed (%s). "
+            "Run backfill.py to generate missing embeddings.",
+            record_id, exc,
+        )
 
 # ── Input models ──────────────────────────────────────────────────────────────
 
@@ -236,7 +252,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
-        await embeddings.store_embedding_async(record_id, embeddings.build_embed_text(params.summary, body))
+        asyncio.create_task(_bg_embed(record_id, embeddings.build_embed_text(params.summary, body)))
         return (
             f"✅ Decision recorded (id: **{record_id}**)\n\n"
             f"**{params.summary}**\n"
@@ -281,7 +297,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
-        await embeddings.store_embedding_async(record_id, embeddings.build_embed_text(params.summary, body))
+        asyncio.create_task(_bg_embed(record_id, embeddings.build_embed_text(params.summary, body)))
         return (
             f"🚫 Dead end logged (id: **{record_id}**)\n\n"
             f"**{params.summary}**\n"
@@ -330,7 +346,7 @@ def register_tools(mcp: FastMCP) -> None:
             summary=params.summary,
             body=body,
         )
-        await embeddings.store_embedding_async(record_id, embeddings.build_embed_text(params.summary, body))
+        asyncio.create_task(_bg_embed(record_id, embeddings.build_embed_text(params.summary, body)))
         return f"💾 Context snapshot saved (id: **{record_id}**)\n\n**{params.summary}**"
 
     @mcp.tool(
@@ -362,7 +378,7 @@ def register_tools(mcp: FastMCP) -> None:
             record_type="question",
             summary=params.question,
         )
-        await embeddings.store_embedding_async(record_id, embeddings.build_embed_text(params.question, None))
+        asyncio.create_task(_bg_embed(record_id, embeddings.build_embed_text(params.question, None)))
         return f"❓ Question logged (id: **{record_id}**)\n\n{params.question}"
 
     @mcp.tool(
