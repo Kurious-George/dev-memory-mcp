@@ -4,12 +4,6 @@ A Model Context Protocol (MCP) server that gives Claude persistent memory across
 
 ---
 
-## Current issues + to-do
-- [ ] Custom connector icon
-- [ ] Set as V1
-
----
-
 ## The problem
 
 Claude is an exceptional thought partner for software development. But every conversation starts from zero. You spend the first few minutes re-explaining your stack, your constraints, what you already tried. Decisions you made two weeks ago are gone. Dead ends you hit are forgotten. The reasoning behind your architecture exists nowhere.
