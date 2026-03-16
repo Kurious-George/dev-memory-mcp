@@ -5,17 +5,6 @@ A Model Context Protocol (MCP) server that gives Claude persistent memory across
 ---
 
 ## Current issues + to-do
-- [ ] Fix remeber_decision tool hanging
-- [ ] Test each tool
-  - [ ] remember_decision
-  - [ ] log_dead_end
-  - [ ] save_context
-  - [ ] add_question
-  - [ ] recall
-  - [ ] get_session_brief
-  - [ ] resolve_question
-  - [ ] list_projects
-  - [ ] delete_record
 - [ ] Custom connector icon
 - [ ] Set as V1
 
