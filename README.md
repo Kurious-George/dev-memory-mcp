@@ -2,6 +2,8 @@
 
 A Model Context Protocol (MCP) server that gives Claude persistent memory across conversations — specifically built for developers who want Claude to remember architectural decisions, failed approaches, and project context between sessions.
 
+Specifically created for Claude Desktop
+
 ---
 
 ## The problem
